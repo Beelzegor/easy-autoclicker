@@ -1,5 +1,6 @@
 """Ventana principal de Easy Autoclicker: construcción de la UI y la lógica."""
 
+import os
 import random
 import threading
 import time
@@ -13,7 +14,7 @@ from .constants import CLICK_COUNTS, DEFAULT_HOTKEYS, MOUSE_BUTTONS
 from .key_row import KeyRow
 from .keys import key_to_text
 from .macro import MacroRecorder
-from .paths import CONFIG_PATH, MACROS_DIR, PRESETS_PATH, ensure_dirs, load_json, save_json
+from .paths import CONFIG_PATH, MACROS_DIR, PRESETS_PATH, SEQUENCES_DIR, ensure_dirs, load_json, save_json
 from .sequence import SequenceRunner
 from .step_row import StepRow
 
@@ -241,11 +242,50 @@ class AutoClickerApp:
             justify="left",
         ).pack(anchor="w", padx=6, pady=(4, 0))
 
-        self.steps_container = ttk.Frame(seq_frame)
-        self.steps_container.pack(fill="both", expand=True, padx=6, pady=4)
+        canvas_frame = ttk.Frame(seq_frame)
+        canvas_frame.pack(fill="both", expand=True, padx=6, pady=4)
 
-        ttk.Button(seq_frame, text="Agregar paso", command=lambda: self._add_step_row()).pack(
-            anchor="w", padx=6, pady=(0, 6)
+        self.steps_canvas = tk.Canvas(canvas_frame, height=220, highlightthickness=0)
+        steps_scrollbar = ttk.Scrollbar(canvas_frame, orient="vertical", command=self.steps_canvas.yview)
+        self.steps_container = ttk.Frame(self.steps_canvas)
+
+        self._steps_canvas_window = self.steps_canvas.create_window(
+            (0, 0), window=self.steps_container, anchor="nw"
+        )
+        self.steps_container.bind(
+            "<Configure>",
+            lambda e: self.steps_canvas.configure(scrollregion=self.steps_canvas.bbox("all")),
+        )
+        self.steps_canvas.bind(
+            "<Configure>",
+            lambda e: self.steps_canvas.itemconfigure(self._steps_canvas_window, width=e.width),
+        )
+        self.steps_canvas.configure(yscrollcommand=steps_scrollbar.set)
+
+        self.steps_canvas.pack(side="left", fill="both", expand=True)
+        steps_scrollbar.pack(side="right", fill="y")
+
+        def _on_mousewheel(event):
+            self.steps_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        def _bind_wheel(event):
+            self.steps_canvas.bind_all("<MouseWheel>", _on_mousewheel)
+
+        def _unbind_wheel(event):
+            self.steps_canvas.unbind_all("<MouseWheel>")
+
+        canvas_frame.bind("<Enter>", _bind_wheel)
+        canvas_frame.bind("<Leave>", _unbind_wheel)
+
+        add_btns = ttk.Frame(seq_frame)
+        add_btns.pack(fill="x", padx=6, pady=(0, 6))
+
+        ttk.Button(add_btns, text="Agregar paso", command=lambda: self._add_step_row()).pack(side="left")
+        ttk.Button(add_btns, text="Guardar secuencia...", command=self._save_sequence_dialog).pack(
+            side="left", padx=(6, 0)
+        )
+        ttk.Button(add_btns, text="Cargar secuencia...", command=self._load_sequence_dialog).pack(
+            side="left", padx=(6, 0)
         )
 
         btns = ttk.Frame(seq_frame)
@@ -409,6 +449,39 @@ class AutoClickerApp:
             self.sequence_status_var.set("Sin pasos agregados")
         else:
             self.sequence_status_var.set(f"{len(self.step_rows)} paso(s) listos")
+
+    def _clear_step_rows(self):
+        for row in list(self.step_rows):
+            row.destroy()
+        self.step_rows = []
+
+    def _save_sequence_dialog(self):
+        ensure_dirs()
+        if self.sequence.is_running:
+            messagebox.showinfo("Secuencia", "Detén la secuencia antes de guardarla.")
+            return
+        if not self.step_rows:
+            messagebox.showinfo("Secuencia", "No hay pasos para guardar.")
+            return
+        path = filedialog.asksaveasfilename(
+            initialdir=SEQUENCES_DIR, defaultextension=".json", filetypes=[("Secuencia JSON", "*.json")]
+        )
+        if path:
+            save_json(path, {"steps": [row.to_dict() for row in self.step_rows]})
+            self.sequence_status_var.set(f"Secuencia guardada: {os.path.basename(path)}")
+
+    def _load_sequence_dialog(self):
+        ensure_dirs()
+        if self.sequence.is_running:
+            messagebox.showinfo("Secuencia", "Detén la secuencia antes de cargar otra.")
+            return
+        path = filedialog.askopenfilename(initialdir=SEQUENCES_DIR, filetypes=[("Secuencia JSON", "*.json")])
+        if path:
+            data = load_json(path, {"steps": []})
+            self._clear_step_rows()
+            for step_data in data.get("steps", []):
+                self._add_step_row(step_data)
+            self.sequence_status_var.set(f"Secuencia cargada: {os.path.basename(path)}")
 
     def _toggle_sequence_repeat_field(self):
         state = "disabled" if self.sequence_loop_forever.get() else "normal"
@@ -712,8 +785,7 @@ class AutoClickerApp:
         if not self.key_rows:
             self._add_key_row()
 
-        for row in list(self.step_rows):
-            self._on_step_action(row, "delete")
+        self._clear_step_rows()
         seq = cfg.get("sequence", {})
         for step_data in seq.get("steps", []):
             self._add_step_row(step_data)

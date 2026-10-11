@@ -22,7 +22,10 @@ desbloquear lo básico.
   simultáneos): pulsar una tecla N veces, mantenerla X segundos, hacer clic
   N veces o simplemente esperar, con repetición infinita o contada. El
   hotkey de Iniciar/Detener (F6 por defecto) también arranca y detiene la
-  secuencia junto con el resto.
+  secuencia junto con el resto. La lista de pasos tiene scroll propio para
+  no agrandar la ventana, y cada secuencia se puede guardar y cargar como
+  archivo `.json` independiente, así que puedes tener varias secuencias
+  guardadas y cambiar entre ellas sin perfiles.
 - **Hotkeys configurables**: asigna la tecla que prefieras para
   iniciar/detener y para el botón de pánico (detiene todo, incluida la
   grabación o reproducción de macros), sin quedar atado a F6/Esc.

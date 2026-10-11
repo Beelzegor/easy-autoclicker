@@ -21,11 +21,13 @@ else:
 CONFIG_PATH = os.path.join(CONFIG_DIR, "config.json")
 PRESETS_PATH = os.path.join(CONFIG_DIR, "presets.json")
 MACROS_DIR = os.path.join(CONFIG_DIR, "macros")
+SEQUENCES_DIR = os.path.join(CONFIG_DIR, "sequences")
 
 
 def ensure_dirs():
     os.makedirs(CONFIG_DIR, exist_ok=True)
     os.makedirs(MACROS_DIR, exist_ok=True)
+    os.makedirs(SEQUENCES_DIR, exist_ok=True)
 
 
 def load_json(path, default):
