@@ -512,6 +512,16 @@ class AutoClickerApp:
         for row in self.key_rows:
             row.start(self.keyboard_controller)
 
+        if self.step_rows and not self.sequence.is_running:
+            loop_forever = self.sequence_loop_forever.get()
+            try:
+                repeat = max(int(self.sequence_repeat_var.get()), 1)
+            except ValueError:
+                repeat = 1
+            steps = [row.to_dict() for row in self.step_rows]
+            self.sequence.start(steps, loop_forever=loop_forever, repeat=repeat)
+            self.sequence_run_button.configure(text="Detener secuencia")
+
     def stop(self):
         if not self.running:
             return
@@ -524,6 +534,10 @@ class AutoClickerApp:
 
         for row in self.key_rows:
             row.stop()
+
+        if self.sequence.is_running:
+            self.sequence.stop()
+            self.sequence_run_button.configure(text="Ejecutar secuencia")
 
     def panic_stop(self):
         self.stop()

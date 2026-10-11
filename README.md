@@ -18,6 +18,11 @@ desbloquear lo básico.
 - **Grabador de macros**: graba una secuencia real de movimientos de mouse,
   clics, scroll y teclas, y reprodúcela en loop o una cantidad de veces.
   Las macros se pueden guardar y cargar como archivos `.json`.
+- **Secuencia de pasos**: encadena pasos que corren uno tras otro (no
+  simultáneos): pulsar una tecla N veces, mantenerla X segundos, hacer clic
+  N veces o simplemente esperar, con repetición infinita o contada. El
+  hotkey de Iniciar/Detener (F6 por defecto) también arranca y detiene la
+  secuencia junto con el resto.
 - **Hotkeys configurables**: asigna la tecla que prefieras para
   iniciar/detener y para el botón de pánico (detiene todo, incluida la
   grabación o reproducción de macros), sin quedar atado a F6/Esc.
