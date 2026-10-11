@@ -23,8 +23,6 @@ class StepRow:
         self.frame = ttk.Frame(parent, relief="groove", borderwidth=1)
         self.frame.pack(fill="x", pady=3, padx=2)
 
-        self.highlight_default = self.frame.cget("background")
-
         top = ttk.Frame(self.frame)
         top.pack(fill="x", padx=4, pady=(4, 2))
 
