@@ -14,6 +14,8 @@ from .key_row import KeyRow
 from .keys import key_to_text
 from .macro import MacroRecorder
 from .paths import CONFIG_PATH, MACROS_DIR, PRESETS_PATH, ensure_dirs, load_json, save_json
+from .sequence import SequenceRunner
+from .step_row import StepRow
 
 
 class AutoClickerApp:
@@ -39,6 +41,14 @@ class AutoClickerApp:
             self.mouse_controller, self.keyboard_controller, on_status=self._set_macro_status
         )
 
+        self.step_rows = []
+        self.sequence = SequenceRunner(
+            self.keyboard_controller,
+            self.mouse_controller,
+            on_status=self._set_sequence_status,
+            on_step=self._highlight_step,
+        )
+
         self.tray_icon = None
         self._closing_to_tray = False
 
@@ -56,15 +66,18 @@ class AutoClickerApp:
         mouse_tab = ttk.Frame(notebook)
         keys_tab = ttk.Frame(notebook)
         macro_tab = ttk.Frame(notebook)
+        sequence_tab = ttk.Frame(notebook)
         settings_tab = ttk.Frame(notebook)
         notebook.add(mouse_tab, text="Mouse")
         notebook.add(keys_tab, text="Teclas")
         notebook.add(macro_tab, text="Macros")
+        notebook.add(sequence_tab, text="Secuencia")
         notebook.add(settings_tab, text="Ajustes")
 
         self._build_mouse_tab(mouse_tab)
         self._build_keys_tab(keys_tab)
         self._build_macro_tab(macro_tab)
+        self._build_sequence_tab(sequence_tab)
         self._build_settings_tab(settings_tab)
 
         control_frame = ttk.Frame(self.root)
@@ -216,6 +229,50 @@ class AutoClickerApp:
         self.macro_status_var = tk.StringVar(value="Sin macro grabada")
         ttk.Label(macro_frame, textvariable=self.macro_status_var).pack(anchor="w", padx=6, pady=(0, 6))
 
+    def _build_sequence_tab(self, parent):
+        seq_frame = ttk.LabelFrame(parent, text="Secuencia de pasos (se ejecutan en orden)")
+        seq_frame.pack(fill="both", expand=True, padx=8, pady=6)
+
+        ttk.Label(
+            seq_frame,
+            text="Agrega pasos y se ejecutan uno tras otro: pulsar una tecla N veces, "
+            "mantenerla X segundos, hacer clic N veces o simplemente esperar.",
+            wraplength=440,
+            justify="left",
+        ).pack(anchor="w", padx=6, pady=(4, 0))
+
+        self.steps_container = ttk.Frame(seq_frame)
+        self.steps_container.pack(fill="both", expand=True, padx=6, pady=4)
+
+        ttk.Button(seq_frame, text="Agregar paso", command=lambda: self._add_step_row()).pack(
+            anchor="w", padx=6, pady=(0, 6)
+        )
+
+        btns = ttk.Frame(seq_frame)
+        btns.pack(fill="x", padx=6, pady=(0, 6))
+
+        self.sequence_run_button = ttk.Button(btns, text="Ejecutar secuencia", command=self._toggle_sequence)
+        self.sequence_run_button.pack(side="left")
+
+        loop_frame = ttk.Frame(seq_frame)
+        loop_frame.pack(fill="x", padx=6, pady=(0, 6))
+
+        self.sequence_loop_forever = tk.BooleanVar(value=True)
+        ttk.Checkbutton(
+            loop_frame, text="Repetir sin límite", variable=self.sequence_loop_forever,
+            command=self._toggle_sequence_repeat_field,
+        ).pack(side="left")
+
+        ttk.Label(loop_frame, text="Repeticiones:").pack(side="left", padx=(12, 2))
+        self.sequence_repeat_var = tk.StringVar(value="1")
+        self.sequence_repeat_entry = ttk.Entry(
+            loop_frame, textvariable=self.sequence_repeat_var, width=6, state="disabled"
+        )
+        self.sequence_repeat_entry.pack(side="left")
+
+        self.sequence_status_var = tk.StringVar(value="Sin pasos agregados")
+        ttk.Label(seq_frame, textvariable=self.sequence_status_var).pack(anchor="w", padx=6, pady=(0, 6))
+
     def _build_settings_tab(self, parent):
         hk_frame = ttk.LabelFrame(parent, text="Hotkeys globales")
         hk_frame.pack(fill="x", padx=8, pady=6)
@@ -319,6 +376,72 @@ class AutoClickerApp:
         row.destroy()
         self.key_rows.remove(row)
 
+    # ---------------------------------------------------- Secuencia UI --
+    def _add_step_row(self, data=None):
+        row = StepRow(self.steps_container, self._on_step_action, data)
+        self.step_rows.append(row)
+        self._update_sequence_status_idle()
+
+    def _on_step_action(self, row, action):
+        if action == "delete":
+            if self.sequence.is_running:
+                return
+            row.destroy()
+            self.step_rows.remove(row)
+            self._update_sequence_status_idle()
+            return
+        index = self.step_rows.index(row)
+        if action == "up" and index > 0:
+            self.step_rows[index - 1], self.step_rows[index] = self.step_rows[index], self.step_rows[index - 1]
+            self._reflow_step_rows()
+        elif action == "down" and index < len(self.step_rows) - 1:
+            self.step_rows[index + 1], self.step_rows[index] = self.step_rows[index], self.step_rows[index + 1]
+            self._reflow_step_rows()
+
+    def _reflow_step_rows(self):
+        for row in self.step_rows:
+            row.frame.pack_forget()
+        for row in self.step_rows:
+            row.frame.pack(fill="x", pady=3, padx=2)
+
+    def _update_sequence_status_idle(self):
+        if not self.step_rows:
+            self.sequence_status_var.set("Sin pasos agregados")
+        else:
+            self.sequence_status_var.set(f"{len(self.step_rows)} paso(s) listos")
+
+    def _toggle_sequence_repeat_field(self):
+        state = "disabled" if self.sequence_loop_forever.get() else "normal"
+        self.sequence_repeat_entry.configure(state=state)
+
+    def _set_sequence_status(self, text):
+        self.root.after(0, lambda: self.sequence_status_var.set(text))
+
+    def _highlight_step(self, index):
+        def apply():
+            for i, row in enumerate(self.step_rows):
+                row.set_highlight(i == index)
+            if index == -1 and not self.sequence.is_running:
+                self.sequence_run_button.configure(text="Ejecutar secuencia")
+        self.root.after(0, apply)
+
+    def _toggle_sequence(self):
+        if self.sequence.is_running:
+            self.sequence.stop()
+            self.sequence_run_button.configure(text="Ejecutar secuencia")
+        else:
+            if not self.step_rows:
+                messagebox.showinfo("Secuencia", "Agrega al menos un paso primero.")
+                return
+            loop_forever = self.sequence_loop_forever.get()
+            try:
+                repeat = max(int(self.sequence_repeat_var.get()), 1)
+            except ValueError:
+                repeat = 1
+            steps = [row.to_dict() for row in self.step_rows]
+            self.sequence.start(steps, loop_forever=loop_forever, repeat=repeat)
+            self.sequence_run_button.configure(text="Detener secuencia")
+
     # ------------------------------------------------------- Macro UI --
     def _set_macro_status(self, text):
         self.root.after(0, lambda: self.macro_status_var.set(text))
@@ -410,6 +533,9 @@ class AutoClickerApp:
         if self.macro.is_playing:
             self.macro.stop_playback()
             self.play_button.configure(text="Reproducir")
+        if self.sequence.is_running:
+            self.sequence.stop()
+            self.sequence_run_button.configure(text="Ejecutar secuencia")
 
     def _get_mouse_interval_seconds(self):
         try:
@@ -539,6 +665,11 @@ class AutoClickerApp:
                 "pos_y": self.pos_y_var.get(),
             },
             "keys": [row.to_dict() for row in self.key_rows],
+            "sequence": {
+                "steps": [row.to_dict() for row in self.step_rows],
+                "loop_forever": self.sequence_loop_forever.get(),
+                "repeat": self.sequence_repeat_var.get(),
+            },
             "hotkeys": self.hotkeys,
             "always_on_top": self.always_on_top_var.get(),
         }
@@ -566,6 +697,15 @@ class AutoClickerApp:
             self._add_key_row(key_data)
         if not self.key_rows:
             self._add_key_row()
+
+        for row in list(self.step_rows):
+            self._on_step_action(row, "delete")
+        seq = cfg.get("sequence", {})
+        for step_data in seq.get("steps", []):
+            self._add_step_row(step_data)
+        self.sequence_loop_forever.set(seq.get("loop_forever", True))
+        self.sequence_repeat_var.set(str(seq.get("repeat", 1)))
+        self._toggle_sequence_repeat_field()
 
         self.hotkeys = dict(cfg.get("hotkeys", DEFAULT_HOTKEYS))
         self.toggle_hotkey_var.set(self.hotkeys.get("toggle", "f6"))
@@ -664,6 +804,8 @@ class AutoClickerApp:
             self.macro.stop_recording()
         if self.macro.is_playing:
             self.macro.stop_playback()
+        if self.sequence.is_running:
+            self.sequence.stop()
         try:
             self._listener.stop()
         except Exception:
