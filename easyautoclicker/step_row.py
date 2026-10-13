@@ -5,7 +5,7 @@ from tkinter import ttk
 
 from .constants import MOUSE_BUTTONS
 from .sequence import STEP_KIND_LABELS, STEP_KINDS, step_summary
-from .widgets import CaptureDialog, attach_number_check, tooltip
+from .widgets import CaptureDialog, attach_key_check, attach_number_check, tooltip
 
 
 class StepRow:
@@ -113,7 +113,12 @@ class StepRow:
         self._add_label("Tecla:")
         entry = ttk.Entry(self.fields, textvariable=self.key_var, width=14)
         entry.pack(side="left", padx=(2, 4))
-        tooltip(entry, "Tecla o combinación, por ejemplo: espacio, f5, ctrl+shift+a.")
+        attach_key_check(entry, self.key_var)
+        tooltip(
+            entry,
+            "Tecla o combinación, por ejemplo: espacio, f5, ctrl+shift+a. "
+            "Si el campo se pone rojo, ese nombre no existe.",
+        )
         ttk.Button(
             self.fields, text="Capturar", width=9,
             command=lambda: CaptureDialog(

@@ -33,7 +33,14 @@ from .paths import (
 )
 from .sequence import SequenceRunner
 from .step_row import StepRow
-from .widgets import CaptureDialog, ScrollableFrame, attach_number_check, setup_styles, tooltip
+from .widgets import (
+    CaptureDialog,
+    ScrollableFrame,
+    attach_number_check,
+    set_capture_guard,
+    setup_styles,
+    tooltip,
+)
 
 MACRO_SPEEDS = ["0.25", "0.5", "1", "1.5", "2", "3", "4"]
 
@@ -77,6 +84,9 @@ class AutoClickerApp:
         self.hotkey_manager = HotkeyManager(
             dispatch=self._dispatch_hotkey, should_ignore_plain=lambda: self._typing
         )
+        # Mientras cualquier diálogo de captura esté abierto, las hotkeys se
+        # callan: capturar F6 no debe arrancar el autoclicker al mismo tiempo.
+        set_capture_guard(self._set_capture_mode)
 
         self.macro = MacroRecorder(
             self.mouse_controller,
@@ -564,7 +574,9 @@ class AutoClickerApp:
             "  espacio, enter, tabulador, retroceso, suprimir, esc, arriba, abajo,\n"
             "  izquierda, derecha, inicio, fin, página arriba, página abajo, f1 a f12.\n"
             "  Las combinaciones se escriben con +: ctrl+c, ctrl+shift+a, alt+tab.\n"
-            "  Si no te acuerdas del nombre, usa el botón Capturar y presiona la tecla.\n\n"
+            "  Si no te acuerdas del nombre, usa el botón Capturar y presiona la tecla.\n"
+            "  Para capturar ctrl, shift o alt a secas, presiónala y suéltala.\n"
+            "  Si el campo de la tecla se pone rojo, ese nombre no existe.\n\n"
             "Modos de la pestaña Teclas\n"
             "  Pulsar: toca la tecla una y otra vez con el intervalo indicado.\n"
             "  Mantener: deja la tecla presionada hasta que detengas (correr en un juego).\n"
@@ -595,6 +607,18 @@ class AutoClickerApp:
             keys_frame, text=", ".join(COMMON_KEY_NAMES), wraplength=560, justify="left",
             foreground="gray",
         ).pack(anchor="w", padx=6, pady=6)
+
+    # ------------------------------------------------------------ avisos --
+    # Todos los diálogos cuelgan de la ventana principal: así salen centrados
+    # sobre ella y no se esconden detrás cuando está en "siempre visible".
+    def _info(self, title, message):
+        messagebox.showinfo(title, message, parent=self.root)
+
+    def _ask(self, title, message):
+        return messagebox.askyesno(title, message, parent=self.root)
+
+    def _ask_three(self, title, message):
+        return messagebox.askyesnocancel(title, message, parent=self.root)
 
     # ------------------------------------------------------ campos auxiliares --
     def _toggle_position_fields(self):
@@ -651,7 +675,7 @@ class AutoClickerApp:
             else:
                 os.system(f'xdg-open "{CONFIG_DIR}"')
         except Exception:
-            messagebox.showinfo("Carpeta", CONFIG_DIR)
+            self._info("Carpeta", CONFIG_DIR)
 
     # -------------------------------------------------------- filas Teclas --
     def _add_key_row(self, data=None):
@@ -678,7 +702,7 @@ class AutoClickerApp:
             return
         if len(self.key_rows) == 1 and not self.key_rows[0].key_var.get().strip():
             return
-        if not messagebox.askyesno("Teclas", "¿Quitar todas las teclas configuradas?"):
+        if not self._ask("Teclas", "¿Quitar todas las teclas configuradas?"):
             return
         for row in list(self.key_rows):
             row.destroy()
@@ -700,7 +724,7 @@ class AutoClickerApp:
             self._update_sequence_status_idle()
             return
         if self.sequence.is_running and action in ("delete", "up", "down", "duplicate"):
-            messagebox.showinfo("Secuencia", "Detén la secuencia antes de modificar los pasos.")
+            self._info("Secuencia", "Detén la secuencia antes de modificar los pasos.")
             return
         if action == "delete":
             row.destroy()
@@ -749,10 +773,14 @@ class AutoClickerApp:
             return
         active = sum(1 for row in self.step_rows if row.enabled.get())
         total = len(self.step_rows)
+        pasos = "paso" if total == 1 else "pasos"
         if active == total:
-            self.sequence_status_var.set(f"{total} paso(s) listos")
+            listo = "listo" if total == 1 else "listos"
+            self.sequence_status_var.set(f"{total} {pasos} {listo}")
+        elif active == 0:
+            self.sequence_status_var.set(f"Ningún paso habilitado (de {total})")
         else:
-            self.sequence_status_var.set(f"{active} de {total} paso(s) habilitados")
+            self.sequence_status_var.set(f"{active} de {total} {pasos} habilitados")
 
     def _clear_step_rows(self):
         for row in list(self.step_rows):
@@ -763,9 +791,9 @@ class AutoClickerApp:
         if not self.step_rows:
             return
         if self.sequence.is_running:
-            messagebox.showinfo("Secuencia", "Detén la secuencia antes de modificar los pasos.")
+            self._info("Secuencia", "Detén la secuencia antes de modificar los pasos.")
             return
-        if not messagebox.askyesno("Secuencia", "¿Quitar todos los pasos?"):
+        if not self._ask("Secuencia", "¿Quitar todos los pasos?"):
             return
         self._clear_step_rows()
         self._renumber_steps()
@@ -777,7 +805,7 @@ class AutoClickerApp:
 
     def _save_sequence(self):
         if not self.step_rows:
-            messagebox.showinfo("Secuencia", "No hay pasos para guardar.")
+            self._info("Secuencia", "No hay pasos para guardar.")
             return
         name = self.sequence_name_var.get().strip()
         if not name:
@@ -786,7 +814,7 @@ class AutoClickerApp:
         path = json_path(SEQUENCES_DIR, name)
         if not path:
             return
-        if os.path.exists(path) and not messagebox.askyesno(
+        if os.path.exists(path) and not self._ask(
             "Secuencia", f"Ya existe «{name}». ¿Reemplazarla?"
         ):
             return
@@ -797,12 +825,12 @@ class AutoClickerApp:
 
     def _load_sequence(self):
         if self.sequence.is_running:
-            messagebox.showinfo("Secuencia", "Detén la secuencia antes de cargar otra.")
+            self._info("Secuencia", "Detén la secuencia antes de cargar otra.")
             return
         name = self.sequence_name_var.get().strip()
         path = json_path(SEQUENCES_DIR, name)
         if not path or not os.path.exists(path):
-            messagebox.showinfo("Secuencia", "Elige una secuencia guardada.")
+            self._info("Secuencia", "Elige una secuencia guardada.")
             return
         self._apply_sequence_data(load_json(path, {"steps": []}), name)
 
@@ -818,7 +846,7 @@ class AutoClickerApp:
         path = json_path(SEQUENCES_DIR, name)
         if not path or not os.path.exists(path):
             return
-        if not messagebox.askyesno("Secuencia", f"¿Eliminar «{name}»?"):
+        if not self._ask("Secuencia", f"¿Eliminar «{name}»?"):
             return
         try:
             os.remove(path)
@@ -830,9 +858,9 @@ class AutoClickerApp:
     def _sequence_file_dialog(self):
         ensure_dirs()
         if self.sequence.is_running:
-            messagebox.showinfo("Secuencia", "Detén la secuencia antes de importar o exportar.")
+            self._info("Secuencia", "Detén la secuencia antes de importar o exportar.")
             return
-        choice = messagebox.askyesnocancel(
+        choice = self._ask_three(
             "Secuencia", "¿Exportar la secuencia actual a un archivo?\n\n"
             "Sí: exportar.  No: importar desde un archivo."
         )
@@ -840,9 +868,10 @@ class AutoClickerApp:
             return
         if choice:
             if not self.step_rows:
-                messagebox.showinfo("Secuencia", "No hay pasos para exportar.")
+                self._info("Secuencia", "No hay pasos para exportar.")
                 return
             path = filedialog.asksaveasfilename(
+                parent=self.root,
                 initialdir=SEQUENCES_DIR, defaultextension=".json",
                 filetypes=[("Secuencia JSON", "*.json")],
             )
@@ -850,6 +879,7 @@ class AutoClickerApp:
                 save_json(path, {"version": 2, "steps": [r.to_dict() for r in self.step_rows]})
         else:
             path = filedialog.askopenfilename(
+                parent=self.root,
                 initialdir=SEQUENCES_DIR, filetypes=[("Secuencia JSON", "*.json")]
             )
             if path:
@@ -898,7 +928,7 @@ class AutoClickerApp:
             self._stop_sequence()
             return
         if not self.step_rows:
-            messagebox.showinfo("Secuencia", "Agrega al menos un paso primero.")
+            self._info("Secuencia", "Agrega al menos un paso primero.")
             return
         self._start_sequence()
 
@@ -921,9 +951,9 @@ class AutoClickerApp:
             self.record_button.configure(text="Grabar")
             return
         if self.macro.is_playing:
-            messagebox.showinfo("Macro", "Detén la reproducción antes de grabar.")
+            self._info("Macro", "Detén la reproducción antes de grabar.")
             return
-        if self.macro.events and not messagebox.askyesno(
+        if self.macro.events and not self._ask(
             "Macro", "Ya hay una macro grabada. ¿Reemplazarla con una grabación nueva?"
         ):
             return
@@ -936,10 +966,10 @@ class AutoClickerApp:
             self._stop_playback()
             return
         if self.macro.is_recording:
-            messagebox.showinfo("Macro", "Detén la grabación antes de reproducir.")
+            self._info("Macro", "Detén la grabación antes de reproducir.")
             return
         if not self.macro.events:
-            messagebox.showinfo("Macro", "No hay nada grabado todavía.")
+            self._info("Macro", "No hay nada grabado todavía.")
             return
         loop_forever = self.macro_loop_forever.get()
         try:
@@ -966,11 +996,11 @@ class AutoClickerApp:
 
     def _clear_macro(self):
         if self.macro.is_recording or self.macro.is_playing:
-            messagebox.showinfo("Macro", "Detén la grabación o la reproducción primero.")
+            self._info("Macro", "Detén la grabación o la reproducción primero.")
             return
         if not self.macro.events:
             return
-        if messagebox.askyesno("Macro", "¿Borrar la macro en memoria?"):
+        if self._ask("Macro", "¿Borrar la macro en memoria?"):
             self.macro.clear()
 
     def _refresh_macro_list(self):
@@ -979,7 +1009,7 @@ class AutoClickerApp:
 
     def _save_macro(self):
         if not self.macro.events:
-            messagebox.showinfo("Macro", "No hay nada grabado todavía.")
+            self._info("Macro", "No hay nada grabado todavía.")
             return
         name = self.macro_name_var.get().strip()
         if not name:
@@ -988,7 +1018,7 @@ class AutoClickerApp:
         path = json_path(MACROS_DIR, name)
         if not path:
             return
-        if os.path.exists(path) and not messagebox.askyesno(
+        if os.path.exists(path) and not self._ask(
             "Macro", f"Ya existe «{name}». ¿Reemplazarla?"
         ):
             return
@@ -1000,12 +1030,12 @@ class AutoClickerApp:
 
     def _load_macro(self):
         if self.macro.is_recording or self.macro.is_playing:
-            messagebox.showinfo("Macro", "Detén la grabación o la reproducción primero.")
+            self._info("Macro", "Detén la grabación o la reproducción primero.")
             return
         name = self.macro_name_var.get().strip()
         path = json_path(MACROS_DIR, name)
         if not path or not os.path.exists(path):
-            messagebox.showinfo("Macro", "Elige una macro guardada.")
+            self._info("Macro", "Elige una macro guardada.")
             return
         self.macro.load_dict(load_json(path, {"events": []}), name=name)
 
@@ -1014,7 +1044,7 @@ class AutoClickerApp:
         path = json_path(MACROS_DIR, name)
         if not path or not os.path.exists(path):
             return
-        if not messagebox.askyesno("Macro", f"¿Eliminar «{name}»?"):
+        if not self._ask("Macro", f"¿Eliminar «{name}»?"):
             return
         try:
             os.remove(path)
@@ -1026,9 +1056,9 @@ class AutoClickerApp:
     def _macro_file_dialog(self):
         ensure_dirs()
         if self.macro.is_recording or self.macro.is_playing:
-            messagebox.showinfo("Macro", "Detén la grabación o la reproducción primero.")
+            self._info("Macro", "Detén la grabación o la reproducción primero.")
             return
-        choice = messagebox.askyesnocancel(
+        choice = self._ask_three(
             "Macro", "¿Exportar la macro actual a un archivo?\n\n"
             "Sí: exportar.  No: importar desde un archivo."
         )
@@ -1036,9 +1066,10 @@ class AutoClickerApp:
             return
         if choice:
             if not self.macro.events:
-                messagebox.showinfo("Macro", "No hay nada grabado todavía.")
+                self._info("Macro", "No hay nada grabado todavía.")
                 return
             path = filedialog.asksaveasfilename(
+                parent=self.root,
                 initialdir=MACROS_DIR, defaultextension=".json",
                 filetypes=[("Macro JSON", "*.json")],
             )
@@ -1046,6 +1077,7 @@ class AutoClickerApp:
                 save_json(path, self.macro.to_dict())
         else:
             path = filedialog.askopenfilename(
+                parent=self.root,
                 initialdir=MACROS_DIR, filetypes=[("Macro JSON", "*.json")]
             )
             if path:
@@ -1077,7 +1109,7 @@ class AutoClickerApp:
         if self.running:
             return
         if not self._has_work():
-            messagebox.showinfo(
+            self._info(
                 "Easy Autoclicker",
                 "No hay nada configurado para ejecutar.\n\n"
                 "Habilita el clic automático, agrega una tecla o arma una secuencia.",
@@ -1363,14 +1395,14 @@ class AutoClickerApp:
         if callback is not None:
             self._ui(callback)
 
+    def _set_capture_mode(self, active):
+        self._capturing_hotkey = active
+        self.hotkey_manager.paused = active
+
     def _assign_hotkey(self, action):
-        self._capturing_hotkey = True
-        self.hotkey_manager.paused = True
         self.assign_status_var.set("Presiona la tecla o combinación...")
 
         def done(combo):
-            self._capturing_hotkey = False
-            self.hotkey_manager.paused = False
             if not combo:
                 self.assign_status_var.set("Captura cancelada")
                 return
@@ -1384,18 +1416,12 @@ class AutoClickerApp:
             self._apply_hotkeys()
             self.assign_status_var.set(f"Asignado: {combo_label(combo)}")
 
-        def cancelled():
-            self._capturing_hotkey = False
-            self.hotkey_manager.paused = False
-            self.assign_status_var.set("Captura cancelada")
-
-        dialog = CaptureDialog(self.root, done, title=HOTKEY_LABELS.get(action, "Hotkey"))
-        dialog.window.bind("<Destroy>", lambda e: self._after_capture_closed(cancelled), add="+")
-
-    def _after_capture_closed(self, cancelled):
-        """Si el diálogo se cerró sin capturar nada, vuelve al estado normal."""
-        if self._capturing_hotkey:
-            cancelled()
+        CaptureDialog(
+            self.root,
+            done,
+            title=HOTKEY_LABELS.get(action, "Hotkey"),
+            on_cancel=lambda: self.assign_status_var.set("Captura cancelada"),
+        )
 
     def _clear_hotkey(self, action):
         self.hotkeys[action] = ""
@@ -1580,7 +1606,7 @@ class AutoClickerApp:
             return
         name = name.strip()
         presets = load_json(PRESETS_PATH, {})
-        if name in presets and not messagebox.askyesno(
+        if name in presets and not self._ask(
             "Perfiles", f"Ya existe «{name}». ¿Reemplazarlo?"
         ):
             return
@@ -1605,7 +1631,7 @@ class AutoClickerApp:
         name = self.preset_var.get()
         if not name:
             return
-        if not messagebox.askyesno("Perfiles", f"¿Eliminar el perfil «{name}»?"):
+        if not self._ask("Perfiles", f"¿Eliminar el perfil «{name}»?"):
             return
         presets = load_json(PRESETS_PATH, {})
         if name in presets:

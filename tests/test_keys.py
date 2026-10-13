@@ -1,5 +1,8 @@
 """Pruebas de la interpretación de nombres de tecla y combinaciones."""
 
+import sys
+
+import pytest
 from pynput import keyboard
 
 from easyautoclicker.keys import (
@@ -58,6 +61,24 @@ def test_key_to_text_normaliza_lado():
     assert key_to_text(keyboard.Key.ctrl_l) == "ctrl"
     assert key_to_text(keyboard.Key.space) == "space"
     assert key_to_text(keyboard.KeyCode.from_char("B")) == "b"
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="los códigos virtuales son de Windows")
+def test_key_to_text_usa_el_codigo_cuando_el_caracter_no_sirve():
+    # Con ctrl apretado, Windows informa un carácter de control (o ninguno).
+    assert key_to_text(keyboard.KeyCode(vk=0x43, char="\x03")) == "c"
+    assert key_to_text(keyboard.KeyCode(vk=0x43, char=None)) == "c"
+    assert key_to_text(keyboard.KeyCode(vk=0x31, char=None)) == "1"
+
+
+def test_key_to_text_conserva_el_caracter_de_las_demas_teclas():
+    assert key_to_text(keyboard.KeyCode(vk=0xC0, char="ñ")) == "ñ"
+    assert key_to_text(keyboard.KeyCode(vk=0xBB, char="+")) == "+"
+
+
+def test_key_to_text_cae_al_codigo_si_no_hay_nada_legible():
+    assert key_to_text(keyboard.KeyCode(vk=0xFF, char=None)) == "vk255"
+    assert key_to_text(keyboard.KeyCode(vk=0xFF, char="\x00")) == "vk255"
 
 
 def test_split_combo_respeta_el_mas_literal():

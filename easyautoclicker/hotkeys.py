@@ -9,6 +9,7 @@ import threading
 
 from pynput import keyboard
 
+from .capture import ComboCapture
 from .constants import MODIFIER_NAMES
 from .keys import key_to_text, normalize_combo
 
@@ -26,7 +27,9 @@ class HotkeyManager:
 
         self._bindings = {}
         self._lock = threading.Lock()
-        self._held_modifiers = set()
+        # Misma máquina de estados que el diálogo de captura, para que una
+        # hotkey se dispare con la misma pulsación con la que se asignó.
+        self._combo = ComboCapture()
         self._listener = None
 
     # ------------------------------------------------------------ registro --
@@ -83,31 +86,29 @@ class HotkeyManager:
 
     def _on_press(self, key):
         try:
-            name = key_to_text(key)
-            if name in MODIFIER_NAMES:
-                self._held_modifiers.add(name)
-                return
-            if self.paused:
-                return
-            self._fire(self._current_combo(name))
+            combo = self._combo.press(key_to_text(key))
+            if combo and not self.paused:
+                self._fire(combo)
         except Exception:
             pass
 
     def _on_release(self, key):
+        """Un modificador que se presiona y se suelta solo también es hotkey.
+
+        No se puede disparar al presionarlo (todavía podría venir la segunda
+        tecla de una combinación), así que se decide al soltarlo.
+        """
         try:
-            name = key_to_text(key)
-            self._held_modifiers.discard(name)
+            combo = self._combo.release(key_to_text(key))
+            if combo and not self.paused:
+                self._fire(combo)
         except Exception:
             pass
 
-    def _current_combo(self, key_name):
-        mods = [m for m in MODIFIER_NAMES if m in self._held_modifiers]
-        return normalize_combo("+".join(mods + [key_name]))
-
     def _fire(self, combo):
-        # Una hotkey de una sola tecla imprimible no debe dispararse mientras
-        # se escribe en un campo de la propia ventana.
-        plain = "+" not in combo and len(combo) == 1
+        # Una hotkey de una sola tecla imprimible (o un modificador suelto) no
+        # debe dispararse mientras se escribe en un campo de la propia ventana.
+        plain = "+" not in combo and (len(combo) == 1 or combo in MODIFIER_NAMES)
         if plain and self._should_ignore_plain():
             return
         with self._lock:

@@ -33,7 +33,9 @@ desbloquear lo básico.
   pánico (detiene todo), grabar macro, reproducir macro y ejecutar
   secuencia. Se asignan presionando la combinación deseada (`f6`,
   `ctrl+shift+k`, lo que sea) y el programa avisa si una combinación ya está
-  usada por otra acción.
+  usada por otra acción. Cualquier tecla sirve, incluidas `espacio`, `esc` y
+  un modificador suelto como `shift`: para elegir un modificador solo, se
+  presiona y se suelta.
 - **Límite de tiempo**: opción de detener todo automáticamente después de N
   segundos.
 - **Estado en vivo**: contador de clics, tiempo corriendo y clics por

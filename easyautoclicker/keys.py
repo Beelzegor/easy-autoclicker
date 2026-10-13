@@ -5,9 +5,21 @@ Además de teclas sueltas, aquí se interpretan combinaciones escritas como
 se liberan al revés, igual que haría una persona.
 """
 
+import sys
+
 from pynput import keyboard
 
 from .constants import KEY_ALIASES, MODIFIER_NAMES
+
+# Códigos de tecla virtual de Windows para letras y dígitos. Con ctrl o altgr
+# apretados, el carácter que informa el sistema es un carácter de control o
+# directamente nada ("ctrl+c" llegaba como "ctrl+vk67"), así que para estas
+# teclas conviene mirar el código y no el carácter. Los códigos siguen la
+# distribución del teclado, así que la letra sale bien también en AZERTY.
+_WINDOWS_VK_NAMES = {}
+if sys.platform == "win32":
+    _WINDOWS_VK_NAMES = {vk: chr(vk).lower() for vk in range(0x41, 0x5B)}  # A-Z
+    _WINDOWS_VK_NAMES.update({vk: chr(vk) for vk in range(0x30, 0x3A)})  # 0-9
 
 
 def normalize_key_name(name):
@@ -37,8 +49,12 @@ def is_modifier_name(name):
 def key_to_text(key):
     """Convierte una tecla de pynput a su nombre canónico en texto."""
     if isinstance(key, keyboard.KeyCode):
-        if key.char:
-            return key.char.lower()
+        name = _WINDOWS_VK_NAMES.get(key.vk)
+        if name:
+            return name
+        char = key.char
+        if char and char.isprintable() and char.strip():
+            return char.lower()
         if key.vk is not None:
             return f"vk{key.vk}"
         return str(key)

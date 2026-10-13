@@ -6,7 +6,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from .keys import parse_combo, press_combo, release_combo, tap_combo
-from .widgets import CaptureDialog, attach_number_check, tooltip
+from .widgets import CaptureDialog, attach_key_check, attach_number_check, tooltip
 
 KEY_MODES = ["Pulsar", "Mantener"]
 
@@ -38,10 +38,11 @@ class KeyRow:
         self.key_var = tk.StringVar(value=data.get("key", ""))
         self.key_entry = ttk.Entry(top, textvariable=self.key_var, width=14)
         self.key_entry.pack(side="left")
+        attach_key_check(self.key_entry, self.key_var)
         tooltip(
             self.key_entry,
             "Nombre de la tecla (espacio, enter, f1, a...) o una combinación "
-            "como ctrl+shift+a.",
+            "como ctrl+shift+a. Si el campo se pone rojo, ese nombre no existe.",
         )
 
         ttk.Button(top, text="Capturar", width=9, command=self._capture_key).pack(
