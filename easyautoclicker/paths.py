@@ -39,6 +39,26 @@ def load_json(path, default):
 
 
 def save_json(path, data):
+    """Guarda en disco de forma atómica: si falla a mitad, no corrompe nada."""
     ensure_dirs()
-    with open(path, "w", encoding="utf-8") as f:
+    temp_path = f"{path}.tmp"
+    with open(temp_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
+    os.replace(temp_path, path)
+
+
+def list_json_names(directory):
+    """Nombres (sin extensión) de los .json guardados en una carpeta."""
+    try:
+        names = [f[:-5] for f in os.listdir(directory) if f.lower().endswith(".json")]
+    except OSError:
+        return []
+    return sorted(names, key=str.lower)
+
+
+def json_path(directory, name):
+    """Ruta del .json con ese nombre dentro de la carpeta indicada."""
+    safe = "".join(c for c in (name or "").strip() if c not in '\\/:*?"<>|')
+    if not safe:
+        return None
+    return os.path.join(directory, f"{safe}.json")
