@@ -11,4 +11,4 @@ No tiene funciones "premium" bloqueadas: todo lo de aquí está disponible
 siempre, sin pagar nada.
 """
 
-__version__ = "1.4.0"
+__version__ = "1.4.1"

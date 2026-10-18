@@ -62,6 +62,8 @@ class SequenceRunner:
         self._thread = None
         self._held_keys = []
         self._held_buttons = []
+        # Identifica la vuelta en curso, para descartar avisos de una vieja.
+        self._run_id = 0
 
     @property
     def is_running(self):
@@ -71,10 +73,15 @@ class SequenceRunner:
         """Arranca la secuencia. ``steps`` son diccionarios como los de StepRow."""
         if self._running:
             return
+        if not self._wait_for_thread():
+            self.on_status("La secuencia anterior todavía está terminando")
+            return
         active = [(i, s) for i, s in enumerate(steps or []) if s.get("enabled", True)]
         if not active:
             self.on_status("No hay pasos habilitados")
             return
+        self._run_id += 1
+        run_id = self._run_id
         self._running = True
         self._stop_event.clear()
         repeat = max(int(repeat), 1)
@@ -103,9 +110,10 @@ class SequenceRunner:
                         self.on_status(f"Ejecutando secuencia... (vuelta {count + 1})")
             finally:
                 self._release_held()
-                self._running = False
-                self.on_step(-1)
-                self.on_status(f"Secuencia terminada ({count} vuelta(s))")
+                if run_id == self._run_id:
+                    self._running = False
+                    self.on_step(-1)
+                    self.on_status(f"Secuencia terminada ({count} vuelta(s))")
 
         self.on_status("Ejecutando secuencia...")
         self._thread = threading.Thread(target=loop, daemon=True)
@@ -113,8 +121,23 @@ class SequenceRunner:
 
     def stop(self):
         self._stop_event.set()
+        # Esperar al hilo deja el estado resuelto antes de volver, para que un
+        # arranque inmediato no solape dos ejecuciones.
+        self._wait_for_thread()
         self._release_held()
         self._running = False
+
+    def _wait_for_thread(self, timeout=2.0):
+        """Espera a que termine el hilo anterior. Devuelve si ya no corre."""
+        thread = self._thread
+        if thread is None or thread is threading.current_thread():
+            return True
+        thread.join(timeout)
+        if thread.is_alive():
+            return False
+        if self._thread is thread:
+            self._thread = None
+        return True
 
     def _release_held(self):
         """Suelta lo que haya quedado pulsado si la secuencia se cortó."""

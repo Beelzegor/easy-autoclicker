@@ -168,3 +168,45 @@ def test_resumenes_legibles():
     assert step_summary({"kind": "key_press", "key": "a", "times": 3}) == "Pulsar 'a' x3"
     assert step_summary({"kind": "wait", "duration": 2}) == "Esperar 2s"
     assert step_summary({"kind": "mouse_move", "x": 5, "y": 6}) == "Mover mouse a 5,6"
+
+
+def test_detener_deja_la_secuencia_realmente_parada():
+    runner = SequenceRunner(FakeKeyboard(), FakeMouse())
+    steps = [{"enabled": True, "kind": "key_press", "key": "a", "times": 1000, "interval_ms": 20}]
+    runner.start(steps, loop_forever=True)
+    time.sleep(0.05)
+    runner.stop()
+    assert not runner.is_running
+    assert runner._thread is None or not runner._thread.is_alive()
+
+
+def test_arrancar_justo_despues_de_detener_no_duplica_la_secuencia():
+    estados = []
+    runner = SequenceRunner(
+        FakeKeyboard(), FakeMouse(), on_status=estados.append
+    )
+    steps = [{"enabled": True, "kind": "key_press", "key": "a", "times": 1000, "interval_ms": 20}]
+    runner.start(steps, loop_forever=True)
+    time.sleep(0.05)
+    runner.stop()
+    runner.start(steps, loop_forever=True)
+    assert runner.is_running
+    time.sleep(0.05)
+    assert "Secuencia terminada" not in estados[-1]
+    runner.stop()
+    assert not runner.is_running
+
+
+def test_el_aviso_final_de_una_vuelta_vieja_no_apaga_la_nueva():
+    pasos_marcados = []
+    runner = SequenceRunner(
+        FakeKeyboard(), FakeMouse(), on_step=pasos_marcados.append
+    )
+    steps = [{"enabled": True, "kind": "wait", "duration": 5}]
+    runner.start(steps, loop_forever=True)
+    runner.stop()
+    runner.start(steps, loop_forever=True)
+    time.sleep(0.05)
+    assert runner.is_running
+    assert pasos_marcados[-1] == 0
+    runner.stop()

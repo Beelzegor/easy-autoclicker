@@ -196,6 +196,7 @@ def test_hotkey_de_una_letra_se_ignora_mientras_se_escribe():
     manager.set_bindings({"toggle": "k"})
 
     manager._on_press(keyboard.KeyCode.from_char("k"))
+    manager._on_release(keyboard.KeyCode.from_char("k"))
     assert disparadas == []
 
     escribiendo["valor"] = False

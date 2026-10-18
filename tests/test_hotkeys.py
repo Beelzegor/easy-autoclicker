@@ -88,3 +88,38 @@ def test_uses_key_mira_dentro_de_las_combinaciones():
     assert manager.uses_key("ctrl")
     assert manager.uses_key("p")
     assert not manager.uses_key("q")
+
+
+def test_tecla_sostenida_dispara_una_sola_vez():
+    manager, fired = make_manager({"sequence": "f8"})
+    for _ in range(5):
+        manager._on_press(keyboard.Key.f8)
+    assert fired == ["sequence"]
+    manager._on_release(keyboard.Key.f8)
+    manager._on_press(keyboard.Key.f8)
+    assert fired == ["sequence", "sequence"]
+
+
+def test_las_teclas_del_propio_programa_no_disparan_nada():
+    manager, fired = make_manager({"sequence": "f8", "panic": "shift"})
+    manager._on_press(keyboard.Key.f8, injected=True)
+    manager._on_release(keyboard.Key.f8, injected=True)
+    manager._on_press(keyboard.Key.shift, injected=True)
+    manager._on_release(keyboard.Key.shift, injected=True)
+    assert fired == []
+
+
+def test_un_modificador_inyectado_no_rompe_la_hotkey_real():
+    manager, fired = make_manager({"sequence": "f8"})
+    manager._on_press(keyboard.Key.ctrl_l, injected=True)
+    manager._on_press(keyboard.Key.f8)
+    assert fired == ["sequence"]
+
+
+def test_salir_de_la_pausa_olvida_lo_apretado():
+    manager, fired = make_manager({"sequence": "f8"})
+    manager.paused = True
+    manager._on_press(keyboard.Key.ctrl_l)
+    manager.paused = False
+    manager._on_press(keyboard.Key.f8)
+    assert fired == ["sequence"]

@@ -16,6 +16,8 @@ class ComboCapture:
     def __init__(self, allow_combo=True):
         self.allow_combo = allow_combo
         self._held = []
+        # Teclas normales que siguen apretadas, para ignorar la autorrepetición.
+        self._down = set()
         # Se enciende cuando ya hubo algo más que un único modificador: a
         # partir de ahí, soltarlo no confirma nada.
         self._dirty = False
@@ -23,6 +25,7 @@ class ComboCapture:
     def reset(self):
         """Olvida lo apretado (al perder el foco, por ejemplo)."""
         self._held = []
+        self._down = set()
         self._dirty = False
 
     @property
@@ -42,6 +45,9 @@ class ComboCapture:
             if name not in self._held:
                 self._held.append(name)
             return None
+        if name in self._down:
+            return None
+        self._down.add(name)
         self._dirty = True
         mods = list(self._held) if self.allow_combo else []
         return normalize_combo("+".join(mods + [name]))
@@ -50,6 +56,7 @@ class ComboCapture:
         """Procesa una tecla que sube. Devuelve el modificador si quedó solo."""
         if not name:
             return None
+        self._down.discard(name)
         was_held = name in self._held
         if was_held:
             self._held.remove(name)

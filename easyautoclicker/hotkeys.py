@@ -23,7 +23,7 @@ class HotkeyManager:
 
         # Mientras está en pausa no dispara nada: se usa al capturar una
         # combinación nueva, para que la tecla pulsada no ejecute la acción.
-        self.paused = False
+        self._paused = False
 
         self._bindings = {}
         self._lock = threading.Lock()
@@ -31,6 +31,17 @@ class HotkeyManager:
         # hotkey se dispare con la misma pulsación con la que se asignó.
         self._combo = ComboCapture()
         self._listener = None
+
+    @property
+    def paused(self):
+        return self._paused
+
+    @paused.setter
+    def paused(self, value):
+        value = bool(value)
+        if self._paused and not value:
+            self._combo.reset()
+        self._paused = value
 
     # ------------------------------------------------------------ registro --
     def set_bindings(self, bindings):
@@ -77,6 +88,7 @@ class HotkeyManager:
         self._listener.start()
 
     def stop(self):
+        self._combo.reset()
         listener, self._listener = self._listener, None
         if listener is not None:
             try:
@@ -84,7 +96,11 @@ class HotkeyManager:
             except Exception:
                 pass
 
-    def _on_press(self, key):
+    def _on_press(self, key, injected=False):
+        # Las teclas que escribe el propio programa no son pulsaciones de la
+        # persona: no disparan hotkeys ni cuentan como modificador apretado.
+        if injected:
+            return
         try:
             combo = self._combo.press(key_to_text(key))
             if combo and not self.paused:
@@ -92,12 +108,14 @@ class HotkeyManager:
         except Exception:
             pass
 
-    def _on_release(self, key):
+    def _on_release(self, key, injected=False):
         """Un modificador que se presiona y se suelta solo también es hotkey.
 
         No se puede disparar al presionarlo (todavía podría venir la segunda
         tecla de una combinación), así que se decide al soltarlo.
         """
+        if injected:
+            return
         try:
             combo = self._combo.release(key_to_text(key))
             if combo and not self.paused:

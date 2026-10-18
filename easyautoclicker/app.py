@@ -49,6 +49,7 @@ class AutoClickerApp:
     """Pega la interfaz con los motores de clics, teclas, macros y secuencias."""
 
     UI_TICK_MS = 200
+    QUEUE_TICK_MS = 25
 
     def __init__(self, root):
         self.root = root
@@ -68,6 +69,7 @@ class AutoClickerApp:
         self._click_thread = None
         self._stop_after_id = None
         self._tick_id = None
+        self._queue_tick_id = None
         self._closing = False
 
         # Los hilos de trabajo nunca tocan Tk: dejan el trabajo en esta cola y
@@ -1281,6 +1283,8 @@ class AutoClickerApp:
     def _schedule_tick(self):
         if self._tick_id is None and not self._closing:
             self._tick_id = self.root.after(self.UI_TICK_MS, self._tick)
+        if self._queue_tick_id is None and not self._closing:
+            self._queue_tick_id = self.root.after(self.QUEUE_TICK_MS, self._queue_tick)
 
     def _tick(self):
         self._tick_id = None
@@ -1290,6 +1294,13 @@ class AutoClickerApp:
         if self.running:
             self._refresh_stats()
         self._schedule_tick()
+
+    def _queue_tick(self):
+        self._queue_tick_id = None
+        if self._closing:
+            return
+        self._drain_ui_queue()
+        self._queue_tick_id = self.root.after(self.QUEUE_TICK_MS, self._queue_tick)
 
     def _drain_ui_queue(self):
         """Ejecuta en el hilo principal lo que dejaron los hilos de trabajo."""
